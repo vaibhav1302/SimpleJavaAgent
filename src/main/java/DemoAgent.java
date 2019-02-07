@@ -13,13 +13,39 @@ import static net.bytebuddy.matcher.ElementMatchers.named;
 
 public class DemoAgent {
 
-    public static void premain(String args, Instrumentation instrumentation){
-        ClassLogger transformer = new ClassLogger();
-        instrumentation.addTransformer(transformer);
+    public static void premain(String agentArgs, Instrumentation inst) throws Exception {
+        new AgentBuilder.Default()
+                .type(hasSuperType(named("Controller")))
+                .transform(new AgentBuilder.Transformer.ForAdvice()
+                        .include(DemoAgent.class.getClassLoader())
+                        .advice(named("get"), DemoAdvice.class.getName()))
+                .installOn(inst);
+        runHttpServer();
+
     }
 
-    public static void agentmain(final String agentArgs,
-                                 final Instrumentation inst) {
-        System.out.println("Hey, look: I'm instrumenting a running JVM!:AgentMain");
+    public static void agentmain(String agentArgs, Instrumentation inst) {
+        //TODO: currently replacing the agent does not really work as all Agent versions share the same namespace in the same classpath
+        try{
+            premain(agentArgs, inst);
+        }
+        catch (Exception e){
+            System.out.println(e);
+        }
+    }
+
+    static void runHttpServer() throws Exception {
+        InetSocketAddress address = new InetSocketAddress(9300);
+        HttpServer httpServer = HttpServer.create(address, 10);
+        httpServer.createContext("/metrics", httpExchange -> {
+            StringWriter respBodyWriter = new StringWriter();
+            TextFormat.write004(respBodyWriter, CollectorRegistry.defaultRegistry.metricFamilySamples());
+            byte[] respBody = respBodyWriter.toString().getBytes("UTF-8");
+            httpExchange.getResponseHeaders().put("Context-Type", Collections.singletonList("text/plain; charset=UTF-8"));
+            httpExchange.sendResponseHeaders(200, respBody.length);
+            httpExchange.getResponseBody().write(respBody);
+            httpExchange.getResponseBody().close();
+        });
+        httpServer.start();
     }
 }

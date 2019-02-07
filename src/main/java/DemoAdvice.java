@@ -17,6 +17,7 @@ public class DemoAdvice {
         // TODO: Check if request instanceof HttpServletRequest and if getPathInfo() returns null
         httpRequestsTotal.labels(((HttpServletRequest) request).getPathInfo()).inc();
         System.err.println("before serving the request...");
+        System.out.println("Start Method");
     }
 
     @Advice.OnMethodExit
